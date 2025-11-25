@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Memory RAM – Glitch</title>
+  <style>
+    /* ===========================
+       ESTILO HACKER / TERMINAL
+       =========================== */
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #020204;
+      color: #0fffc8;
+      font-family: "Share Tech Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      /* efecto scanline sobre toda la pantalla */
+      background-image: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 255, 170, 0.05) 0px,
+        rgba(0, 255, 170, 0.05) 2px,
+        rgba(0, 0, 0, 0.1) 3px
+      );
+    }
+
+    .game-wrapper {
+      width: 100%;
+      max-width: 900px;
+      padding: 20px;
+      border: 1px solid rgba(0,255,200,0.25);
+      border-radius: 12px;
+      background: rgba(0,15,12,0.25);
+      box-shadow: 0 0 25px rgba(0,255,200,0.3),
+                  inset 0 0 20px rgba(0,255,200,0.15);
+      backdrop-filter: blur(3px);
+      position: relative;
+    }
+
+    /* HUD estilo consola */
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+
+    .title {
+      font-size: 1.3rem;
+      text-shadow: 0 0 12px #00ffcc;
+      color: #00ffd9;
+      letter-spacing: 0.08em;
+    }
+
+    .stats span {
+      color: #0fffc8;
+      background: rgba(0,255,200,0.05);
+      border: 1px solid rgba(0,255,200,0.2);
+      border-radius: 6px;
+      padding: 5px 12px;
+      text-shadow: 0 0 4px #00ffcc;
+    }
+
+    .btn {
+      background: none;
+      border: 1px solid #00ffcc;
+      color: #00ffcc;
+      padding: 8px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-family: inherit;
+      letter-spacing: 0.1em;
+      box-shadow: 0 0 12px rgba(0,255,200,0.4);
+      transition: 0.15s ease;
+    }
+
+    .btn:hover {
+      background: rgba(0,255,200,0.1);
+      box-shadow: 0 0 18px rgba(0,255,200,0.7);
+      transform: translateY(-2px);
+    }
+
+    .btn:active {
+      transform: translateY(2px);
+    }
+
+    /* TABLERO */
+    .game-board {
+      background: rgba(0,12,10,0.35);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,255,200,0.2);
+      box-shadow: inset 0 0 14px rgba(0,255,200,0.12);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(70px, 1fr));
+      gap: 14px;
+    }
+
+    /* CARTAS */
+    .card {
+      position: relative;
+      width: 100%;
+      padding-bottom: 125%; /* relación de aspecto */
+      perspective: 900px;
+      cursor: pointer;
+    }
+
+    .card-inner {
+      position: absolute;
+      inset: 0;
+      transition: transform 0.35s ease;
+      transform-style: preserve-3d;
+    }
+
+    .card.flipped .card-inner,
+    .card.matched .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    /* Caras de la tarjeta: ocupan toda la superficie */
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* CARA FRONTAL */
+    .card-front {
+      background: linear-gradient(145deg, #00110d, #001a15);
+      border: 1px solid rgba(0,255,200,0.1);
+      box-shadow: inset 0 0 8px rgba(0,255,200,0.2);
+    }
+
+    .card-front::before {
+      content: "█ RAM BLOCK █";
+      font-size: 0.65rem;
+      color: rgba(0,255,200,0.5);
+      letter-spacing: 0.15em;
+      text-shadow: 0 0 5px #00ffcc;
+    }
+
+    /* etiqueta opcional dentro de la front (si quisieras usarla) */
+    .card-label {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.6rem;
+      color: rgba(0,255,200,0.6);
+      letter-spacing: 0.12em;
+    }
+
+    /* CARA TRASERA */
+    .card-back {
+      background: radial-gradient(circle at center, #00ffcc 0%, #009e7c 50%, #004738 100%);
+      border-radius: 8px;
+      transform: rotateY(180deg);
+      border: 1px solid #00ffcc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #032b23;
+      text-shadow: 0 0 4px rgba(0,0,0,0.5);
+    }
+
+    .card-symbol {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .card-back .card-symbol {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    /* glitch suave y seguro (error) */
+    .card.glitch {
+      animation: glitchSoft 0.35s ease-out 1;
+    }
+
+    @keyframes glitchSoft {
+      0% {
+        transform: translate(0,0) scale(1);
+        filter: none;
+      }
+      20% {
+        transform: translate(-2px, 1px) scale(1.02);
+        filter: brightness(1.1);
+      }
+      40% {
+        transform: translate(2px, -1px) scale(0.98);
+        filter: brightness(0.9);
+      }
+      60% {
+        transform: translate(-1px, -1px) scale(1.01);
+        filter: brightness(1.05);
+      }
+      100% {
+        transform: translate(0,0) scale(1);
+        filter: none;
+      }
+    }
+
+    /* EFECTO DE ACIERTO (PAREJA CORRECTA) */
+    .card.matched .card-inner {
+      /* ya está girada por rotateY(180deg), le sumamos un sutil zoom */
+      transform: rotateY(180deg) scale(1.03);
+    }
+
+    .card.matched .card-back {
+      box-shadow: 0 0 14px rgba(0, 255, 150, 0.9),
+                  0 0 30px rgba(0, 255, 150, 0.5);
+      animation: matchPulse 0.45s ease-out 1;
+    }
+
+    /* ✔ flotando arriba de la carta cuando se hace match */
+    .card.matched::after {
+      content: "✔";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -40%);
+      font-size: 1.5rem;
+      color: #00ffb0;
+      text-shadow: 0 0 8px #00ffcc;
+      opacity: 0;
+      pointer-events: none;
+      animation: matchFloat 0.5s ease-out 1;
+    }
+
+    /* pulso de la carta */
+    @keyframes matchPulse {
+      0% {
+        transform: rotateY(180deg) scale(0.9);
+        filter: brightness(0.9);
+      }
+      60% {
+        transform: rotateY(180deg) scale(1.08);
+        filter: brightness(1.1);
+      }
+      100% {
+        transform: rotateY(180deg) scale(1.03);
+        filter: brightness(1);
+      }
+    }
+
+    /* ✔ que flota y se desvanece */
+    @keyframes matchFloat {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -30%);
+      }
+      30% {
+        opacity: 1;
+        transform: translate(-50%, -42%);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -55%);
+      }
+    }
+
+    /* MENSAJES */
+    .message {
+      color: #00ffd9;
+      margin-top: 10px;
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+      text-shadow: 0 0 6px #00ffcc;
+      min-height: 1.2em;
+    }
+
+    /* ===========================
+       WIN OVERLAY (Efecto final)
+       =========================== */
+
+    .win-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 20, 15, 0.92);
+      display: none; /* se mostrará cuando ganen */
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 999;
+      overflow: hidden;
+      backdrop-filter: blur(2px);
+      animation: fadeIn 0.6s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    .win-content {
+      text-align: center;
+      position: relative;
+      z-index: 2;
+      padding: 10px 20px;
+    }
+
+    .win-content h1 {
+      font-size: 3rem;
+      letter-spacing: 0.15em;
+      color: #00ffcc;
+      text-shadow: 0 0 20px #00ffcc, 0 0 50px #00ffcc;
+      animation: glowPulse 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes glowPulse {
+      from { text-shadow: 0 0 20px #00ffcc; }
+      to   { text-shadow: 0 0 50px #00ffaa; }
+    }
+
+    .win-content .sub {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: #85ffeb;
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 10px #00ffcc;
+    }
+
+    /* Efecto "Matrix rain" sutil */
+    .matrix {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.25;
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(0, 255, 200, 0.12) 0px,
+    rgba(0, 255, 200, 0.12) 2px,
+    transparent 3px,
+    transparent 6px
+  );
+  animation: matrixMove 4s linear infinite;
+  filter: blur(1px);
+}
+
+@keyframes matrixMove {
+  from { transform: translateY(-10%); }
+  to   { transform: translateY(10%); }
+}
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <div class="hud">
+      <div class="title">MEMORY RAM // <span style="opacity:.7;">GLITCH MODE</span></div>
+      <div class="stats">
+        <span>Movimientos: <strong id="moves">0</strong></span>
+        <span>Parejas: <strong id="matches">0</strong>/8</span>
+      </div>
+      <button class="btn" id="resetBtn">Reiniciar</button>
+    </div>
+
+    <div class="game-board">
+      <div class="grid" id="grid"></div>
+      <p class="message" id="message">
+        Encuentra las parejas de bloques de memoria antes de que el sistema colapse…
+      </p>
+    </div>
+  </div>
+
+  <!-- Overlay de victoria -->
+  <div id="winOverlay" class="win-overlay">
+    <div class="win-content">
+      <h1>SYSTEM STABILIZED</h1>
+      <p class="sub">✔ Todos los bloques de memoria fueron reconstruidos</p>
+    </div>
+    <div class="matrix"></div>
+  </div>
+
+  <script>
+    // ----- CONFIG BÁSICA -----
+    const symbols = [
+      "{ }", "< />", "0xAF", "1010",
+      "CPU", "RAM", "∞", "??"
+    ]; // 8 símbolos → 16 cartas
+
+    const gridElement = document.getElementById("grid");
+    const movesElement = document.getElementById("moves");
+    const matchesElement = document.getElementById("matches");
+    const messageElement = document.getElementById("message");
+    const resetBtn = document.getElementById("resetBtn");
+    const winOverlay = document.getElementById("winOverlay");
+
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let moves = 0;
+    let matches = 0;
+    const totalPairs = symbols.length;
+
+    // ----- FUNCIONES -----
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function createCard(symbol) {
+      const card = document.createElement("div");
+      card.classList.add("card");
+      card.dataset.symbol = symbol;
+
+      const inner = document.createElement("div");
+      inner.classList.add("card-inner");
+
+      const front = document.createElement("div");
+      front.classList.add("card-face", "card-front");
+
+      const label = document.createElement("span");
+      label.classList.add("card-label");
+      label.textContent = "RAM BLOCK";
+      front.appendChild(label);
+
+      const back = document.createElement("div");
+      back.classList.add("card-face", "card-back");
+
+      const symbolSpan = document.createElement("span");
+      symbolSpan.classList.add("card-symbol");
+      symbolSpan.textContent = symbol;
+      back.appendChild(symbolSpan);
+
+      inner.appendChild(front);
+      inner.appendChild(back);
+      card.appendChild(inner);
+
+      card.addEventListener("click", onCardClick);
+      return card;
+    }
+
+    function setupBoard() {
+      gridElement.innerHTML = "";
+      const doubled = [...symbols, ...symbols];
+      shuffle(doubled);
+      doubled.forEach(sym => {
+        const cardEl = createCard(sym);
+        gridElement.appendChild(cardEl);
+      });
+
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+      moves = 0;
+      matches = 0;
+      updateStats();
+      messageElement.textContent =
+        "Encuentra las parejas de bloques de memoria antes de que el sistema colapse…";
+
+      // ocultar overlay de victoria si estaba visible
+      winOverlay.style.display = "none";
+    }
+
+    function updateStats() {
+      movesElement.textContent = moves;
+      matchesElement.textContent = matches;
+    }
+
+    function onCardClick(e) {
+      const card = e.currentTarget;
+
+      if (lockBoard) return;
+      if (card === firstCard) return;
+      if (card.classList.contains("matched")) return;
+
+      card.classList.add("flipped");
+
+      if (!firstCard) {
+        firstCard = card;
+        return;
+      }
+
+      secondCard = card;
+      moves++;
+      updateStats();
+      checkForMatch();
+    }
+
+    function checkForMatch() {
+      const isMatch = firstCard.dataset.symbol === secondCard.dataset.symbol;
+
+      if (isMatch) {
+        handleMatch();
+      } else {
+        handleMismatch();
+      }
+    }
+
+    function handleMatch() {
+      firstCard.classList.add("matched");
+      secondCard.classList.add("matched");
+      matches++;
+      updateStats();
+
+      messageElement.innerHTML =
+        "✅ Bloque de memoria <strong>estabilizado</strong>.";
+
+      resetTurn();
+
+      if (matches === totalPairs) {
+        // pequeño delay para ver la última animación de acierto
+        setTimeout(() => {
+          winOverlay.style.display = "flex";
+        }, 600);
+      }
+    }
+
+    function handleMismatch() {
+      lockBoard = true;
+      firstCard.classList.add("glitch");
+      secondCard.classList.add("glitch");
+
+      messageElement.textContent = "⚠ Error de lectura de memoria… reintentando.";
+
+      setTimeout(() => {
+        firstCard.classList.remove("flipped", "glitch");
+        secondCard.classList.remove("flipped", "glitch");
+        resetTurn();
+      }, 800);
+    }
+
+    function resetTurn() {
+      [firstCard, secondCard] = [null, null];
+      lockBoard = false;
+    }
+
+    // ----- EVENTOS -----
+    resetBtn.addEventListener("click", setupBoard);
+
+    // ----- INICIO -----
+    setupBoard();
+  </script>
+</body>
+</html>
